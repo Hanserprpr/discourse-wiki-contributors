@@ -218,6 +218,23 @@ function wireActions(wrapper, initialPayload) {
   }
 }
 
+function isWikiPost(post, cooked) {
+  if (post?.wiki) {
+    return true;
+  }
+
+  const topicPost = cooked.closest(".topic-post, article[data-post-id]");
+  return !!topicPost?.classList?.contains("post--wiki") || !!topicPost?.classList?.contains("wiki");
+}
+
+function postIdFor(post, cooked) {
+  if (post?.id) {
+    return post.id;
+  }
+
+  return cooked.closest("article[data-post-id]")?.getAttribute("data-post-id");
+}
+
 export default apiInitializer("1.8.0", (api) => {
   const siteSettings = api.container.lookup("service:site-settings");
 
@@ -228,8 +245,9 @@ export default apiInitializer("1.8.0", (api) => {
   api.decorateCookedElement(
     async (cooked, helper) => {
       const post = helper?.widget?.attrs;
+      const postId = postIdFor(post, cooked);
 
-      if (!post?.id || !post.wiki) {
+      if (!postId || !isWikiPost(post, cooked)) {
         return;
       }
 
@@ -249,7 +267,7 @@ export default apiInitializer("1.8.0", (api) => {
       cooked.prepend(wrapper);
 
       try {
-        const payload = await ajax(`/wiki-contributors/${post.id}`);
+        const payload = await ajax(`/wiki-contributors/${postId}`);
         wrapper.innerHTML = buildContributorsHtml(payload, false);
         wireActions(wrapper, payload);
       } catch (error) {

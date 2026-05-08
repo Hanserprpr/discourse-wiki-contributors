@@ -268,6 +268,17 @@ SiteSetting.wiki_contributors_enabled
 /wiki-contributors/POST_ID
 ```
 
+4. 如果 API 正常但页面不显示，检查帖子 DOM 上是否有 Wiki 标记：
+
+```js
+document.querySelector("article[data-post-id='POST_ID']")?.closest(".topic-post")?.className
+```
+
+新版本前端会同时兼容：
+
+- `helper.widget.attrs.wiki`
+- DOM class：`post--wiki` / `wiki`
+
 常见状态：
 
 - `404`：非 Wiki、帖子不存在、或插件关闭；
