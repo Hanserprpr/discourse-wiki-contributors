@@ -1,0 +1,15 @@
+en:
+  js:
+    wiki_contributors:
+      title: "Wiki Contributors"
+      loading: "Loading contributors..."
+      empty: "No contributors yet"
+      failed: "Failed to load contributors"
+      maintained_by:
+        one: "This wiki is maintained by %{count} member"
+        other: "This wiki is maintained by %{count} members"
+      edit_count:
+        one: "%{count} edit"
+        other: "%{count} edits"
+      and_more: "and %{count} more contributors"
+      last_edited_at: "Last edited at %{time}"

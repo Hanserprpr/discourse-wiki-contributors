@@ -1,0 +1,11 @@
+zh_CN:
+  js:
+    wiki_contributors:
+      title: "Wiki 贡献者"
+      loading: "正在加载贡献者..."
+      empty: "暂无贡献者"
+      failed: "贡献者加载失败"
+      maintained_by: "本文由 %{count} 位成员共同维护"
+      edit_count: "%{count} 次编辑"
+      and_more: "等 %{count} 位贡献者"
+      last_edited_at: "最近编辑：%{time}"

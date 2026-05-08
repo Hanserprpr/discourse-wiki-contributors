@@ -1,0 +1,126 @@
+.wiki-contributors-wrapper {
+  margin-bottom: 1em;
+}
+
+.wiki-contributors-box {
+  border: 1px solid var(--primary-low);
+  background: var(--secondary);
+  border-radius: 8px;
+  padding: 0.85em 1em;
+  margin-bottom: 1em;
+}
+
+.wiki-contributors-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+  margin-bottom: 0.75em;
+}
+
+.wiki-contributors-title {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+.wiki-contributors-summary,
+.wiki-contributors-status {
+  color: var(--primary-medium);
+  font-size: 0.9em;
+  margin-top: 0.15em;
+}
+
+.wiki-contributors-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.wiki-contributors-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75em;
+  padding: 0.45em 0;
+  border-top: 1px solid var(--primary-low);
+}
+
+.wiki-contributors-item:first-child {
+  border-top: 0;
+}
+
+.wiki-contributors-user {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.6em;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.wiki-contributors-user:hover {
+  color: var(--tertiary);
+}
+
+.wiki-contributors-avatar {
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.wiki-contributors-user-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.wiki-contributors-username {
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.wiki-contributors-name {
+  color: var(--primary-medium);
+  font-size: 0.85em;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wiki-contributors-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15em;
+  color: var(--primary-medium);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.wiki-contributors-edit-count {
+  color: var(--primary-high);
+}
+
+.wiki-contributors-more {
+  margin-top: 0.65em;
+  color: var(--primary-medium);
+  font-size: 0.9em;
+}
+
+.wiki-contributors-error {
+  border-color: var(--danger-low);
+}
+
+@media screen and (max-width: 600px) {
+  .wiki-contributors-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .wiki-contributors-meta {
+    align-items: flex-start;
+    padding-left: 42px;
+  }
+}
