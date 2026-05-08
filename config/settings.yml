@@ -10,3 +10,8 @@ plugins:
   wiki_contributors_show_edit_count:
     default: true
     client: true
+  wiki_contributors_cache_ttl_minutes:
+    default: 10
+    min: 1
+    max: 1440
+    client: false

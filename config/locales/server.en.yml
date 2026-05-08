@@ -3,3 +3,4 @@ en:
     wiki_contributors_enabled: "Enable wiki contributors list on wiki posts."
     wiki_contributors_limit: "Maximum number of wiki contributors shown by default."
     wiki_contributors_show_edit_count: "Show edit count for each wiki contributor."
+    wiki_contributors_cache_ttl_minutes: "Cache wiki contributors API responses for this many minutes. Cache is cleared when the post is edited."

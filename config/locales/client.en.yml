@@ -12,4 +12,7 @@ en:
         one: "%{count} edit"
         other: "%{count} edits"
       and_more: "and %{count} more contributors"
+      view_all: "View all contributors"
+      collapse: "Show fewer"
+      loading_all: "Loading all contributors..."
       last_edited_at: "Last edited at %{time}"

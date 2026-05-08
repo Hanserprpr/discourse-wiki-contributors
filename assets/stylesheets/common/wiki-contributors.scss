@@ -103,10 +103,21 @@
   color: var(--primary-high);
 }
 
-.wiki-contributors-more {
+.wiki-contributors-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
   margin-top: 0.65em;
+}
+
+.wiki-contributors-load-all,
+.wiki-contributors-collapse {
+  line-height: 1.2;
+}
+
+.wiki-contributors-more-count {
   color: var(--primary-medium);
-  font-size: 0.9em;
+  margin-left: 0.35em;
 }
 
 .wiki-contributors-error {
@@ -122,5 +133,10 @@
   .wiki-contributors-meta {
     align-items: flex-start;
     padding-left: 42px;
+  }
+
+  .wiki-contributors-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

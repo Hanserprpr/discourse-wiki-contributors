@@ -9,7 +9,10 @@ Discourse 插件：在 Wiki 帖正文上方显示贡献者名单。
 - 同一用户多次编辑自动去重。
 - 显示用户名、头像、编辑次数、最近编辑时间。
 - 按最近编辑时间倒序。
-- 超过限制时只显示前 N 位，并显示“等 N 位贡献者”。
+- 默认只显示前 N 位，点击“查看全部贡献者”后加载更多。
+- 最近编辑时间在前端显示为相对时间，鼠标悬停显示完整时间。
+- 后端使用 `Discourse.cache` 缓存 API 响应，帖子编辑/删除时清理对应缓存。
+- 统计口径会排除系统用户、未激活用户和 staged 用户，避免显示自动任务或不可访问账户。
 - 不修改 Discourse 核心代码。
 - 不绕过 Discourse 权限逻辑。
 
@@ -18,12 +21,21 @@ Discourse 插件：在 Wiki 帖正文上方显示贡献者名单。
 - `wiki_contributors_enabled`：默认 `true`
 - `wiki_contributors_limit`：默认 `10`，最大 `50`
 - `wiki_contributors_show_edit_count`：默认 `true`
+- `wiki_contributors_cache_ttl_minutes`：默认 `10`，最大 `1440`
 
 ## API
 
 ```http
 GET /wiki-contributors/:post_id
 ```
+
+默认返回站点设置限制数量内的贡献者。
+
+```http
+GET /wiki-contributors/:post_id?all=true
+```
+
+返回更多贡献者，最多 `200` 人，避免超大编辑历史导致一次性响应过重。
 
 示例：
 
@@ -42,6 +54,7 @@ GET /wiki-contributors/:post_id
   ],
   "total": 3,
   "limit": 10,
+  "all": false,
   "show_edit_count": true
 }
 ```
@@ -109,6 +122,8 @@ Wiki 贡献者
 
 并显示头像、用户名、编辑次数、最近编辑时间。
 
+如果贡献者超过 `wiki_contributors_limit`，会显示“查看全部贡献者”按钮，点击后加载更多。
+
 ### 2. 测试 API
 
 进入容器：
@@ -130,6 +145,7 @@ post.id
 
 ```text
 https://你的论坛域名/wiki-contributors/POST_ID
+https://你的论坛域名/wiki-contributors/POST_ID?all=true
 ```
 
 ### 3. 非 Wiki 帖
@@ -139,6 +155,24 @@ https://你的论坛域名/wiki-contributors/POST_ID
 ### 4. 权限测试
 
 对私密分类中的 Wiki 帖，用无权限用户访问 API，应该无法看到贡献者信息。
+
+### 5. 运行插件测试
+
+在 Discourse 源码/容器环境中运行：
+
+```bash
+cd /var/www/discourse
+bundle exec rspec plugins/discourse-wiki-contributors/spec
+```
+
+如果你通过 `discourse_docker` 进入容器：
+
+```bash
+cd /var/discourse
+./launcher enter app
+cd /var/www/discourse
+bundle exec rspec plugins/discourse-wiki-contributors/spec
+```
 
 ## 排查错误
 
@@ -172,6 +206,7 @@ PostRevision.column_names
 - `created_at`
 - `updated_at`
 - `revised_at`
+- `edited_at`
 
 如果你的 Discourse 版本字段不同，请修改 `plugin.rb` 中：
 
@@ -179,6 +214,16 @@ PostRevision.column_names
 DiscourseWikiContributors.revision_user_column
 DiscourseWikiContributors.revision_time_column
 ```
+
+### 查看缓存
+
+缓存 key 前缀：
+
+```text
+wiki-contributors:v2:post:POST_ID
+```
+
+帖子编辑或删除时插件会尝试清理对应缓存；如果某些缓存后端不支持 `delete_matched`，最多等待 `wiki_contributors_cache_ttl_minutes` 自然过期。
 
 ### 查看日志
 
@@ -231,6 +276,14 @@ SiteSetting.wiki_contributors_enabled
 
 ## 设计说明
 
-本插件不新增数据库表，不改变 Wiki 和编辑历史逻辑。每次请求时从 `PostRevision` 聚合统计贡献者。
+本插件不新增数据库表，不改变 Wiki 和编辑历史逻辑。贡献者仍以 `PostRevision` 为准。
 
-如果论坛规模很大、Wiki 编辑历史很多，可后续增加缓存或索引优化。
+当前统计口径：
+
+- 同一用户多次修订只显示一次；
+- `edit_count` 是该用户在该帖子上的修订记录数；
+- `last_edited_at` 是该用户最近一次修订时间；
+- 排除系统用户、未激活用户和 staged 用户；
+- 不把原作者强行加入贡献者，除非原作者出现在 `PostRevision` 中。
+
+如果论坛规模很大、Wiki 编辑历史很多，可进一步增加数据库索引或更细粒度缓存失效策略。

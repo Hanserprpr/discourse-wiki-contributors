@@ -2,7 +2,7 @@
 
 # name: discourse-wiki-contributors
 # about: Show a lightweight contributors list for Discourse wiki posts
-# version: 0.1.0
+# version: 0.2.0
 # authors: Hanserprpr
 # url: https://github.com/Hanserprpr/discourse-wiki-contributors
 # required_version: 3.0.0
@@ -16,6 +16,7 @@ after_initialize do
     PLUGIN_NAME = "discourse-wiki-contributors"
     DEFAULT_LIMIT = 10
     MAX_LIMIT = 50
+    MAX_ALL_LIMIT = 200
 
     class Engine < ::Rails::Engine
       engine_name PLUGIN_NAME
@@ -38,7 +39,18 @@ after_initialize do
         rows = query_revision_rows
         return [] if rows.blank?
 
-        users_by_id = User.where(id: rows.map { |row| row[:user_id] }.uniq).index_by(&:id)
+        # 统计口径：
+        # - 贡献者来源仍然只看 PostRevision 的编辑者；
+        # - 排除系统用户、被删除/未激活/staged 用户，避免显示自动任务或不可访问账户；
+        # - 同一用户多次修订聚合为一次，并统计 edit_count；
+        # - 默认不把原帖作者强行加入贡献者，除非作者确实在 PostRevision 中出现。
+        users_by_id =
+          User
+            .where(id: rows.map { |row| row[:user_id] }.uniq)
+            .where(active: true)
+            .where(staged: false)
+            .where.not(id: system_user_id)
+            .index_by(&:id)
 
         rows.filter_map do |row|
           user = users_by_id[row[:user_id]]
@@ -52,7 +64,7 @@ after_initialize do
             edit_count: row[:edit_count].to_i,
             last_edited_at: row[:last_edited_at]&.iso8601
           }
-        end
+        end.take(limit)
       end
 
       private
@@ -62,7 +74,7 @@ after_initialize do
       def normalize_limit(value)
         value = value.to_i
         value = DiscourseWikiContributors::DEFAULT_LIMIT if value <= 0
-        [value, DiscourseWikiContributors::MAX_LIMIT].min
+        [value, DiscourseWikiContributors::MAX_ALL_LIMIT].min
       end
 
       def revision_user_column
@@ -71,6 +83,12 @@ after_initialize do
 
       def revision_time_column
         @revision_time_column ||= DiscourseWikiContributors.revision_time_column
+      end
+
+      def system_user_id
+        Discourse.system_user&.id
+      rescue StandardError
+        -1
       end
 
       def query_revision_rows
@@ -93,7 +111,7 @@ after_initialize do
           .where.not(revision_user_column => nil)
           .group(revision_user_column)
           .order(Arel.sql("MAX(#{quoted_time_column}) DESC"))
-          .limit(limit)
+          .limit(DiscourseWikiContributors::MAX_ALL_LIMIT)
           .pluck(
             Arel.sql("#{quoted_user_column} AS user_id"),
             Arel.sql("COUNT(*) AS edit_count"),
@@ -139,9 +157,33 @@ after_initialize do
         "updated_at"
       elsif columns.include?("revised_at")
         "revised_at"
+      elsif columns.include?("edited_at")
+        "edited_at"
       else
         "created_at"
       end
+    end
+
+    def self.cache_ttl
+      ttl = SiteSetting.wiki_contributors_cache_ttl_minutes.to_i
+      ttl = 10 if ttl <= 0
+      ttl.minutes
+    end
+
+    def self.cache_key(post_id:, limit:, include_all:)
+      user_column = revision_user_column || "none"
+      time_column = revision_time_column || "none"
+      "wiki-contributors:v2:post:#{post_id}:limit:#{limit}:all:#{include_all}:user:#{user_column}:time:#{time_column}"
+    end
+
+    def self.clear_cache_for(post_id)
+      return unless post_id
+
+      # delete_matched 在 Discourse.cache 后端中可用；如果某些后端不支持，降级为 no-op，
+      # 最多等待 TTL 自然过期，不影响正确性。
+      Discourse.cache.delete_matched("wiki-contributors:v2:post:#{post_id}:*")
+    rescue StandardError => e
+      Rails.logger.warn("[#{PLUGIN_NAME}] Failed to clear cache for post #{post_id}: #{e.class}: #{e.message}")
     end
   end
 
@@ -161,30 +203,61 @@ after_initialize do
       raise Discourse::InvalidAccess unless guardian.can_see?(post.topic)
       raise Discourse::InvalidAccess unless guardian.can_see_post?(post)
 
-      limit = SiteSetting.wiki_contributors_limit.to_i
-      limit = DiscourseWikiContributors::DEFAULT_LIMIT if limit <= 0
-      limit = [limit, DiscourseWikiContributors::MAX_LIMIT].min
+      include_all = ActiveModel::Type::Boolean.new.cast(params[:all])
+      limit = resolved_limit(include_all: include_all)
+      cache_key = DiscourseWikiContributors.cache_key(post_id: post.id, limit: limit, include_all: include_all)
 
-      render_json_dump(
-        post_id: post.id,
-        contributors: DiscourseWikiContributors::ContributorsQuery.call(post: post, limit: limit),
-        total: total_contributors(post),
-        limit: limit,
-        show_edit_count: SiteSetting.wiki_contributors_show_edit_count
-      )
+      payload =
+        Discourse.cache.fetch(cache_key, expires_in: DiscourseWikiContributors.cache_ttl) do
+          {
+            post_id: post.id,
+            contributors: DiscourseWikiContributors::ContributorsQuery.call(post: post, limit: limit),
+            total: total_contributors(post),
+            limit: limit,
+            all: include_all,
+            show_edit_count: SiteSetting.wiki_contributors_show_edit_count
+          }
+        end
+
+      # show_edit_count 是显示设置，不参与贡献者统计；每次响应使用最新设置，避免等缓存过期。
+      payload = payload.merge(show_edit_count: SiteSetting.wiki_contributors_show_edit_count)
+
+      render_json_dump(payload)
     end
 
     private
+
+    def resolved_limit(include_all:)
+      configured_limit = SiteSetting.wiki_contributors_limit.to_i
+      configured_limit = DiscourseWikiContributors::DEFAULT_LIMIT if configured_limit <= 0
+
+      if include_all
+        DiscourseWikiContributors::MAX_ALL_LIMIT
+      else
+        [configured_limit, DiscourseWikiContributors::MAX_LIMIT].min
+      end
+    end
 
     def total_contributors(post)
       user_column = DiscourseWikiContributors.revision_user_column
       return 0 unless user_column
 
-      PostRevision
-        .where(post_id: post.id)
-        .where.not(user_column => nil)
-        .distinct
-        .count(user_column)
+      scope =
+        PostRevision
+          .where(post_id: post.id)
+          .where.not(user_column => nil)
+
+      system_user_id = begin
+        Discourse.system_user&.id
+      rescue StandardError
+        -1
+      end
+      scope = scope.where.not(user_column => system_user_id) if system_user_id
+
+      user_ids = scope.distinct.pluck(user_column)
+      return 0 if user_ids.blank?
+
+      User.where(id: user_ids).where(active: true).where(staged: false).count
     end
   end
 
@@ -194,5 +267,13 @@ after_initialize do
 
   Discourse::Application.routes.append do
     mount ::DiscourseWikiContributors::Engine, at: "/wiki-contributors"
+  end
+
+  on(:post_edited) do |post, *_args|
+    DiscourseWikiContributors.clear_cache_for(post&.id)
+  end
+
+  on(:post_destroyed) do |post, *_args|
+    DiscourseWikiContributors.clear_cache_for(post&.id)
   end
 end

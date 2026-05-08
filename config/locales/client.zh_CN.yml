@@ -8,4 +8,7 @@ zh_CN:
       maintained_by: "本文由 %{count} 位成员共同维护"
       edit_count: "%{count} 次编辑"
       and_more: "等 %{count} 位贡献者"
+      view_all: "查看全部贡献者"
+      collapse: "收起"
+      loading_all: "正在加载全部贡献者..."
       last_edited_at: "最近编辑：%{time}"

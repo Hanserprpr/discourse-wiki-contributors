@@ -3,3 +3,4 @@ zh_CN:
     wiki_contributors_enabled: "是否在 Wiki 帖中启用贡献者名单。"
     wiki_contributors_limit: "默认显示的 Wiki 贡献者数量上限。"
     wiki_contributors_show_edit_count: "是否显示每位 Wiki 贡献者的编辑次数。"
+    wiki_contributors_cache_ttl_minutes: "Wiki 贡献者 API 响应缓存分钟数。帖子被编辑时会清理对应缓存。"
