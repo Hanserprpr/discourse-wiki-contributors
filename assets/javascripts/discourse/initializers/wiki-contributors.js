@@ -56,11 +56,16 @@ function formatRelativeDate(value) {
     ["minute", 60],
   ];
 
-  const locale = typeof I18n.locale === "string" ? I18n.locale : undefined;
-  const formatter =
-    typeof Intl !== "undefined" && Intl.RelativeTimeFormat
-      ? new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
-      : null;
+  const locale = typeof I18n.locale === "string" ? I18n.locale.replace("_", "-") : undefined;
+  let formatter = null;
+
+  if (typeof Intl !== "undefined" && Intl.RelativeTimeFormat) {
+    try {
+      formatter = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+    } catch {
+      formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+    }
+  }
 
   for (const [unit, unitSeconds] of units) {
     if (Math.abs(seconds) >= unitSeconds) {
