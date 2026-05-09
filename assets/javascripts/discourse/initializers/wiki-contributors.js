@@ -218,12 +218,17 @@ function wireActions(wrapper, initialPayload) {
   }
 }
 
+function topicPostFor(cooked) {
+  const article = cooked.closest("article[data-post-id]");
+  return cooked.closest(".topic-post") || article?.closest(".topic-post") || article;
+}
+
 function isWikiPost(post, cooked) {
   if (post?.wiki) {
     return true;
   }
 
-  const topicPost = cooked.closest(".topic-post, article[data-post-id]");
+  const topicPost = topicPostFor(cooked);
   return !!topicPost?.classList?.contains("post--wiki") || !!topicPost?.classList?.contains("wiki");
 }
 
