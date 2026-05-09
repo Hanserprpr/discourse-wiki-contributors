@@ -90,10 +90,15 @@ function buildStatusHtml(statusKey, extraClass) {
   `;
 }
 
+function userPath(username) {
+  return `/u/${encodeURIComponent(String(username || "").toLowerCase())}`;
+}
+
 function buildContributorItem(contributor, showEditCount) {
   const username = escapeHtml(contributor.username);
   const name = escapeHtml(contributor.name || contributor.username);
   const avatar = escapeHtml(avatarUrl(contributor.avatar_template, 45));
+  const profilePath = escapeHtml(userPath(contributor.username));
   const editCount = contributor.edit_count || 0;
   const relativeEditedAt = formatRelativeDate(contributor.last_edited_at);
   const absoluteEditedAt = formatAbsoluteDate(contributor.last_edited_at);
@@ -109,7 +114,13 @@ function buildContributorItem(contributor, showEditCount) {
 
   return `
     <li class="wiki-contributors-item">
-      <a class="wiki-contributors-user" href="/u/${username}">
+      <a
+        class="wiki-contributors-user"
+        href="${profilePath}"
+        data-user-card="${username}"
+        aria-label="${username}"
+        tabindex="0"
+      >
         <img
           class="wiki-contributors-avatar avatar"
           src="${avatar}"
@@ -192,7 +203,41 @@ function buildContributorsHtml(payload, expanded = false) {
   `;
 }
 
-function wireActions(wrapper, initialPayload) {
+function shouldOpenInNewWindow(event) {
+  return event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+}
+
+function wireUserCards(wrapper, appEvents) {
+  if (!appEvents) {
+    return;
+  }
+
+  wrapper.querySelectorAll(".wiki-contributors-user[data-user-card]").forEach((link) => {
+    if (link.dataset.wikiContributorsUserCardWired === "true") {
+      return;
+    }
+
+    link.dataset.wikiContributorsUserCardWired = "true";
+    link.addEventListener("click", (event) => {
+      if (shouldOpenInNewWindow(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      appEvents.trigger(
+        "topic-header:trigger-user-card",
+        link.dataset.userCard,
+        link,
+        event
+      );
+    });
+  });
+}
+
+function wireActions(wrapper, initialPayload, appEvents) {
+  wireUserCards(wrapper, appEvents);
+
   const loadAllButton = wrapper.querySelector(".wiki-contributors-load-all");
   if (loadAllButton) {
     loadAllButton.addEventListener("click", async () => {
@@ -202,7 +247,7 @@ function wireActions(wrapper, initialPayload) {
       try {
         const payload = await ajax(`/wiki-contributors/${initialPayload.post_id}?all=true`);
         wrapper.innerHTML = buildContributorsHtml(payload, true);
-        wireActions(wrapper, initialPayload);
+        wireActions(wrapper, initialPayload, appEvents);
       } catch (error) {
         wrapper.innerHTML = buildStatusHtml(
           "wiki_contributors.failed",
@@ -218,7 +263,7 @@ function wireActions(wrapper, initialPayload) {
   if (collapseButton) {
     collapseButton.addEventListener("click", () => {
       wrapper.innerHTML = buildContributorsHtml(initialPayload, false);
-      wireActions(wrapper, initialPayload);
+      wireActions(wrapper, initialPayload, appEvents);
     });
   }
 }
@@ -245,7 +290,7 @@ function postIdFor(post, cooked) {
   return cooked.closest("article[data-post-id]")?.getAttribute("data-post-id");
 }
 
-async function decorateWikiContributors(cooked, post) {
+async function decorateWikiContributors(cooked, post, appEvents) {
   const postId = postIdFor(post, cooked);
 
   if (!postId || !isWikiPost(post, cooked)) {
@@ -270,7 +315,7 @@ async function decorateWikiContributors(cooked, post) {
   try {
     const payload = await ajax(`/wiki-contributors/${postId}`);
     wrapper.innerHTML = buildContributorsHtml(payload, false);
-    wireActions(wrapper, payload);
+    wireActions(wrapper, payload, appEvents);
   } catch (error) {
     wrapper.innerHTML = buildStatusHtml(
       "wiki_contributors.failed",
@@ -284,14 +329,15 @@ async function decorateWikiContributors(cooked, post) {
   }
 }
 
-function decorateVisibleWikiPosts() {
+function decorateVisibleWikiPosts(appEvents) {
   document
     .querySelectorAll(".topic-post.post--wiki .cooked, .topic-post.wiki .cooked")
-    .forEach((cooked) => decorateWikiContributors(cooked, null));
+    .forEach((cooked) => decorateWikiContributors(cooked, null, appEvents));
 }
 
 export default apiInitializer("1.8.0", (api) => {
   const siteSettings = api.container.lookup("service:site-settings");
+  const appEvents = api.container.lookup("service:app-events");
 
   if (!siteSettings.wiki_contributors_enabled) {
     return;
@@ -299,7 +345,7 @@ export default apiInitializer("1.8.0", (api) => {
 
   api.decorateCookedElement(
     async (cooked, helper) => {
-      await decorateWikiContributors(cooked, helper?.widget?.attrs);
+      await decorateWikiContributors(cooked, helper?.widget?.attrs, appEvents);
     },
     {
       id: "wiki-contributors-decorator",
@@ -307,8 +353,8 @@ export default apiInitializer("1.8.0", (api) => {
     }
   );
 
-  decorateVisibleWikiPosts();
+  decorateVisibleWikiPosts(appEvents);
 
-  const observer = new MutationObserver(() => decorateVisibleWikiPosts());
+  const observer = new MutationObserver(() => decorateVisibleWikiPosts(appEvents));
   observer.observe(document.body, { childList: true, subtree: true });
 });
