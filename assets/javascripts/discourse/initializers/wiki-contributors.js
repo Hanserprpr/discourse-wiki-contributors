@@ -240,6 +240,51 @@ function postIdFor(post, cooked) {
   return cooked.closest("article[data-post-id]")?.getAttribute("data-post-id");
 }
 
+async function decorateWikiContributors(cooked, post) {
+  const postId = postIdFor(post, cooked);
+
+  if (!postId || !isWikiPost(post, cooked)) {
+    return;
+  }
+
+  if (cooked.dataset.wikiContributorsLoaded === "true") {
+    return;
+  }
+
+  cooked.dataset.wikiContributorsLoaded = "true";
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "wiki-contributors-wrapper";
+  wrapper.innerHTML = buildStatusHtml(
+    "wiki_contributors.loading",
+    "wiki-contributors-loading"
+  );
+
+  cooked.prepend(wrapper);
+
+  try {
+    const payload = await ajax(`/wiki-contributors/${postId}`);
+    wrapper.innerHTML = buildContributorsHtml(payload, false);
+    wireActions(wrapper, payload);
+  } catch (error) {
+    wrapper.innerHTML = buildStatusHtml(
+      "wiki_contributors.failed",
+      "wiki-contributors-error"
+    );
+
+    // 不抛出异常，避免影响 Discourse 原有帖子渲染。
+    // 排查时查看浏览器 Network 与 Rails production.log。
+    // eslint-disable-next-line no-console
+    console.warn("Failed to load wiki contributors", error);
+  }
+}
+
+function decorateVisibleWikiPosts() {
+  document
+    .querySelectorAll(".topic-post.post--wiki .cooked, .topic-post.wiki .cooked")
+    .forEach((cooked) => decorateWikiContributors(cooked, null));
+}
+
 export default apiInitializer("1.8.0", (api) => {
   const siteSettings = api.container.lookup("service:site-settings");
 
@@ -249,47 +294,16 @@ export default apiInitializer("1.8.0", (api) => {
 
   api.decorateCookedElement(
     async (cooked, helper) => {
-      const post = helper?.widget?.attrs;
-      const postId = postIdFor(post, cooked);
-
-      if (!postId || !isWikiPost(post, cooked)) {
-        return;
-      }
-
-      if (cooked.dataset.wikiContributorsLoaded === "true") {
-        return;
-      }
-
-      cooked.dataset.wikiContributorsLoaded = "true";
-
-      const wrapper = document.createElement("div");
-      wrapper.className = "wiki-contributors-wrapper";
-      wrapper.innerHTML = buildStatusHtml(
-        "wiki_contributors.loading",
-        "wiki-contributors-loading"
-      );
-
-      cooked.prepend(wrapper);
-
-      try {
-        const payload = await ajax(`/wiki-contributors/${postId}`);
-        wrapper.innerHTML = buildContributorsHtml(payload, false);
-        wireActions(wrapper, payload);
-      } catch (error) {
-        wrapper.innerHTML = buildStatusHtml(
-          "wiki_contributors.failed",
-          "wiki-contributors-error"
-        );
-
-        // 不抛出异常，避免影响 Discourse 原有帖子渲染。
-        // 排查时查看浏览器 Network 与 Rails production.log。
-        // eslint-disable-next-line no-console
-        console.warn("Failed to load wiki contributors", error);
-      }
+      await decorateWikiContributors(cooked, helper?.widget?.attrs);
     },
     {
       id: "wiki-contributors-decorator",
       onlyStream: true,
     }
   );
+
+  decorateVisibleWikiPosts();
+
+  const observer = new MutationObserver(() => decorateVisibleWikiPosts());
+  observer.observe(document.body, { childList: true, subtree: true });
 });
