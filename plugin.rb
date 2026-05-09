@@ -170,18 +170,19 @@ after_initialize do
       ttl.minutes
     end
 
-    def self.cache_key(post_id:, limit:, include_all:)
+    def self.cache_key(post:, limit:, include_all:)
       user_column = revision_user_column || "none"
       time_column = revision_time_column || "none"
-      "wiki-contributors:v2:post:#{post_id}:limit:#{limit}:all:#{include_all}:user:#{user_column}:time:#{time_column}"
+      post_version = post.updated_at&.to_i || post.version || "unknown"
+      "wiki-contributors:v3:post:#{post.id}:version:#{post_version}:limit:#{limit}:all:#{include_all}:user:#{user_column}:time:#{time_column}"
     end
 
     def self.clear_cache_for(post_id)
       return unless post_id
 
-      # delete_matched 在 Discourse.cache 后端中可用；如果某些后端不支持，降级为 no-op，
-      # 最多等待 TTL 自然过期，不影响正确性。
-      Discourse.cache.delete_matched("wiki-contributors:v2:post:#{post_id}:*")
+      # delete_matched 在 Discourse.cache 后端中可用；如果某些后端不支持，缓存 key 仍包含
+      # post.updated_at，帖子编辑后会自动换 key，最多只留下不可命中的旧缓存。
+      Discourse.cache.delete_matched("wiki-contributors:v3:post:#{post_id}:*")
     rescue StandardError => e
       Rails.logger.warn("[#{PLUGIN_NAME}] Failed to clear cache for post #{post_id}: #{e.class}: #{e.message}")
     end
@@ -205,7 +206,7 @@ after_initialize do
 
       include_all = ActiveModel::Type::Boolean.new.cast(params[:all])
       limit = resolved_limit(include_all: include_all)
-      cache_key = DiscourseWikiContributors.cache_key(post_id: post.id, limit: limit, include_all: include_all)
+      cache_key = DiscourseWikiContributors.cache_key(post: post, limit: limit, include_all: include_all)
 
       payload =
         Discourse.cache.fetch(cache_key, expires_in: DiscourseWikiContributors.cache_ttl) do
